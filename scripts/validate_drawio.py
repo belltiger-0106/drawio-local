@@ -62,6 +62,7 @@ EXTERNAL = re.compile(r"(?i)(?:https?|ftps?|file|data|javascript|vbscript):|(?:^
 HTML = re.compile(r"</?[A-Za-z][^>]*>")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]+$")
 AWS_SHAPE = re.compile(r"^mxgraph\.aws4\.[A-Za-z0-9_]+$")
+AWS_RESOURCE_ICON = "mxgraph.aws4.resourceIcon"
 
 
 class InvalidDiagram(Exception):
@@ -115,7 +116,40 @@ def check_style(cell):
         shape = properties["shape"]
         require(shape in SHAPES or AWS_SHAPE.fullmatch(shape), f"セル {cell.get('id')}: 未対応の shape {shape!r}")
     if "resIcon" in properties:
-        require(AWS_SHAPE.fullmatch(properties["resIcon"]), f"セル {cell.get('id')}: resIcon はローカルAWS図形IDにしてください")
+        require(AWS_SHAPE.fullmatch(properties["resIcon"]) and properties["resIcon"] != AWS_RESOURCE_ICON, f"セル {cell.get('id')}: resIcon はresourceIcon以外のローカルAWS図形IDにしてください")
+    if properties.get("shape") == AWS_RESOURCE_ICON:
+        require("resIcon" in properties, f"セル {cell.get('id')}: shape={AWS_RESOURCE_ICON} にはAWS図形の resIcon が必要です")
+    return properties
+
+
+def check_required_aws_icons(root, requested_ids):
+    """Check explicitly identified service nodes; do not infer services from labels.
+
+    The AWS namespace is checked here. Existence in the installed draw.io
+    library must be confirmed locally by the diagram author.
+    """
+    candidates = {}
+    qualified = {}
+    for page in root:
+        for cell in page[0][0]:
+            cell_id = cell.get("id")
+            qualified_id = f"{page.get('id')}/{cell_id}"
+            qualified[qualified_id] = cell
+            candidates.setdefault(cell_id, []).append(qualified_id)
+    for requested in requested_ids:
+        if "/" in requested:
+            matches = [requested] if requested in qualified else []
+        else:
+            matches = candidates.get(requested, [])
+        require(matches, f"AWSアイコン必須セル {requested!r} が存在しません")
+        require(len(matches) == 1, f"AWSアイコン必須セル {requested!r} は複数ページで曖昧です。page-id/cell-id で指定してください: {', '.join(matches)}")
+        qualified_id = matches[0]
+        cell = qualified[qualified_id]
+        require(cell.get("vertex") == "1", f"AWSアイコン必須セル {qualified_id!r} はvertexである必要があります")
+        properties = check_style(cell)
+        shape = properties.get("shape", "")
+        require(AWS_SHAPE.fullmatch(shape), f"AWSアイコン必須セル {qualified_id!r}: shape に mxgraph.aws4.* の組み込み図形が必要です")
+        # check_style already requires a distinct AWS resIcon for resourceIcon.
 
 
 def ancestors(cell_id, cells):
@@ -211,7 +245,7 @@ def check_page(page):
     return len(cells) - 2
 
 
-def validate(path):
+def validate(path, required_aws_icons=None):
     data = path.read_bytes()
     try:
         xml = data.decode("utf-8-sig")
@@ -248,6 +282,8 @@ def validate(path):
             total += check_page(page)
         except InvalidDiagram as error:
             raise InvalidDiagram(f"ページ {page_id}: {error}") from None
+    if required_aws_icons:
+        check_required_aws_icons(root, required_aws_icons)
     return data, len(root), total
 
 
@@ -255,6 +291,7 @@ def main():
     parser = argparse.ArgumentParser(description="drawio-local専用の非圧縮・ローカルXMLを読み取り専用で検証します。汎用draw.ioファイルは対象外です。")
     parser.add_argument("files", nargs="+", type=Path, help="検証対象の.drawio/.xmlファイル")
     parser.add_argument("--same", action="store_true", help="指定した2個以上のファイルがバイト単位で一致することも検査")
+    parser.add_argument("--require-aws-icons", nargs="+", metavar="ID", help="各ファイルの指定セルにAWS組み込み図形を要求。複数ページでは page-id/cell-id を使用。ファイル名はこのオプションより前に指定")
     args = parser.parse_args()
     if args.same and len(args.files) < 2:
         parser.error("--same には2個以上のファイルが必要です")
@@ -262,7 +299,7 @@ def main():
     valid = []
     for path in args.files:
         try:
-            data, pages, cells = validate(path)
+            data, pages, cells = validate(path, args.require_aws_icons)
             valid.append((path, data))
             print(f"OK: {path} ({pages}ページ、{cells}セル)")
         except (OSError, InvalidDiagram) as error:

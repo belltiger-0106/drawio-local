@@ -2,7 +2,7 @@
 
 ## 出力する文書
 
-非圧縮の `mxfile` を使う。`.drawio` と `.xml` は拡張子だけが異なる同一内容にする。次は2つのノードと接続線を持つ最小例。文章やコードフェンスはファイルに含めない。
+非圧縮の `mxfile` を使う。`.drawio` と `.xml` は拡張子だけが異なる同一内容にする。次は利用者と組み込みEC2アイコン、接続線を持つ最小例。文章やコードフェンスはファイルに含めない。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -15,8 +15,8 @@
         <mxCell id="client" value="利用者" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#64748B;fontColor=#0F172A;fontSize=14;" vertex="1" parent="1">
           <mxGeometry x="60" y="100" width="160" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="service" value="サービス" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF4DF;strokeColor=#B7791F;fontColor=#0F172A;fontSize=14;" vertex="1" parent="1">
-          <mxGeometry x="340" y="100" width="160" height="80" as="geometry" />
+        <mxCell id="service" value="Amazon EC2" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;fillColor=#ED7100;strokeColor=#FFFFFF;gradientColor=none;html=0;whiteSpace=wrap;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;spacingTop=6;fontColor=#232F3E;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="340" y="100" width="80" height="80" as="geometry" />
         </mxCell>
         <mxCell id="request" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;strokeColor=#334155;fontColor=#0F172A;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="client" target="service">
           <mxGeometry relative="1" as="geometry" />
@@ -64,7 +64,7 @@ rounded=0;container=1;collapsible=0;recursiveResize=0;whiteSpace=wrap;html=0;ver
 
 ## 外部依存を作らない
 
-出力にはリンク属性、画像セル、SVGの埋め込み、Data URI、URL参照、カスタムJavaScript、外部XML実体、DOCTYPE、HTMLラベルを含めない。XML宣言以外の処理命令も含めない。図形は矩形・円柱などの基本図形、またはローカルで確認した組み込みの名前付き図形を使う。
+出力にはリンク属性、画像セル、SVGの埋め込み、Data URI、URL参照、カスタムJavaScript、外部XML実体、DOCTYPE、HTMLラベルを含めない。XML宣言以外の処理命令も含めない。AWSサービスには組み込みAWS図形を、境界・注記・非AWS要素には基本図形を使う。`mxgraph.aws4.*` はローカルの組み込み図形識別子であり、禁止対象の外部画像参照ではない。
 
 同梱検査スクリプトはこの制限付き形式を検査する。未知の機能を含む既存ファイルのエラーは、draw.io全体で無効だという意味ではない。検査を通すために既存の内容を無言で落とさない。
 
@@ -96,9 +96,11 @@ C:\Program Files (x86)\draw.io\draw.io.exe
 
 ## 納品前の確認項目
 
-1. 要求されたリソース、境界、接続がそろい、推測が注記されている。
+1. 要求されたリソース、境界、接続がそろい、推測が注記されている。AWSサービスには対応する組み込みアイコンが指定されている。
 2. XMLが解釈でき、ID・親・接続先・有限な座標・辺の共通祖先が正しい。
 3. 外部参照、画像、HTMLラベルを含まない。
 4. 各要素が親枠内に収まり、ラベルが読める。線と図形が不用意に重ならない。
 5. `.drawio` と `.xml` が存在し、最終修正後のバイト列が一致する。
 6. 実施した検査と未実施の目視確認を区別して報告できる。
+
+AWS構成図の検査では、すべてのAWSサービスノードを `--require-aws-icons` に指定する。単一ページなら `alb ec2-a ec2-b` のようにセルIDを列挙し、複数ページでIDが重複する場合は `page-id/cell-id` とする。矩形、欠落ID、`resourceIcon` の `resIcon` 指定漏れを検出する。境界枠やラベル用セルは対象に含めない。図形識別子の実在性と画面上の表示は、ローカル資材と描画で確認する。
