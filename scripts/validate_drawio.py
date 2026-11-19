@@ -46,7 +46,7 @@ spacingLeft labelBackgroundColor labelBorderColor rotation direction flipH flipV
 shadow glass perimeter perimeterSpacing startSize horizontal swimlaneLine
 container collapsible childLayout recursiveResize resizeParent resizeLast
 connectable movable resizable editable deletable cloneable autosize overflow
-pointerEvents boundedLbl aspect fixedAspect resIcon outlineConnect
+pointerEvents boundedLbl aspect fixedAspect resIcon outlineConnect grIcon grStroke grIconSize
 edgeStyle rounded orthogonalLoop jettySize orthogonal curved endArrow endFill
 endSize startArrow startFill startSize entryX entryY entryDx entryDy entryPerimeter
 exitX exitY exitDx exitDy exitPerimeter sourcePerimeterSpacing targetPerimeterSpacing
@@ -63,6 +63,13 @@ HTML = re.compile(r"</?[A-Za-z][^>]*>")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]+$")
 AWS_SHAPE = re.compile(r"^mxgraph\.aws4\.[A-Za-z0-9_]+$")
 AWS_RESOURCE_ICON = "mxgraph.aws4.resourceIcon"
+AWS_GROUP_SHAPES = {"mxgraph.aws4.group", "mxgraph.aws4.groupCenter"}
+AWS_GROUP_ICON = re.compile(r"^mxgraph\.aws4\.group_[A-Za-z0-9_]+$")
+
+
+def is_aws_group_shape(shape):
+    """Includes group-frame shapes and their header-icon namespace."""
+    return shape in AWS_GROUP_SHAPES or AWS_GROUP_ICON.fullmatch(shape) is not None
 
 
 class InvalidDiagram(Exception):
@@ -116,18 +123,29 @@ def check_style(cell):
         shape = properties["shape"]
         require(shape in SHAPES or AWS_SHAPE.fullmatch(shape), f"セル {cell.get('id')}: 未対応の shape {shape!r}")
     if "resIcon" in properties:
-        require(AWS_SHAPE.fullmatch(properties["resIcon"]) and properties["resIcon"] != AWS_RESOURCE_ICON, f"セル {cell.get('id')}: resIcon はresourceIcon以外のローカルAWS図形IDにしてください")
+        require(properties.get("shape") not in AWS_GROUP_SHAPES, f"セル {cell.get('id')}: AWSグループ用shapeにはサービス用resIconを指定できません。グループのアイコンにはgrIconを使用してください")
+        icon = properties["resIcon"]
+        require(AWS_SHAPE.fullmatch(icon) and icon != AWS_RESOURCE_ICON and not is_aws_group_shape(icon), f"セル {cell.get('id')}: resIcon はresourceIcon・グループ以外のローカルAWS図形IDにしてください")
     if properties.get("shape") == AWS_RESOURCE_ICON:
         require("resIcon" in properties, f"セル {cell.get('id')}: shape={AWS_RESOURCE_ICON} にはAWS図形の resIcon が必要です")
+    group_keys = {"grIcon", "grStroke", "grIconSize"} & properties.keys()
+    if group_keys:
+        require(properties.get("shape") in AWS_GROUP_SHAPES, f"セル {cell.get('id')}: grIcon/grStroke/grIconSize はAWSグループ用shapeでのみ使用できます")
+    if "grIcon" in properties:
+        require(AWS_GROUP_ICON.fullmatch(properties["grIcon"]), f"セル {cell.get('id')}: grIcon は mxgraph.aws4.group_* のグループ用アイコンにしてください。アイコンなしの場合は属性を省略してください")
+    if "grStroke" in properties:
+        require(properties["grStroke"] in {"0", "1"}, f"セル {cell.get('id')}: grStroke は0または1にしてください")
+    if "grIconSize" in properties:
+        try:
+            icon_size = float(properties["grIconSize"])
+        except ValueError:
+            raise InvalidDiagram(f"セル {cell.get('id')}: grIconSize は正の有限値にしてください") from None
+        require(math.isfinite(icon_size) and icon_size > 0, f"セル {cell.get('id')}: grIconSize は正の有限値にしてください")
     return properties
 
 
-def check_required_aws_icons(root, requested_ids):
-    """Check explicitly identified service nodes; do not infer services from labels.
-
-    The AWS namespace is checked here. Existence in the installed draw.io
-    library must be confirmed locally by the diagram author.
-    """
+def required_vertices(root, requested_ids, description):
+    """Resolve bare or page-qualified IDs without inferring meaning from labels."""
     candidates = {}
     qualified = {}
     for page in root:
@@ -141,15 +159,29 @@ def check_required_aws_icons(root, requested_ids):
             matches = [requested] if requested in qualified else []
         else:
             matches = candidates.get(requested, [])
-        require(matches, f"AWSアイコン必須セル {requested!r} が存在しません")
-        require(len(matches) == 1, f"AWSアイコン必須セル {requested!r} は複数ページで曖昧です。page-id/cell-id で指定してください: {', '.join(matches)}")
+        require(matches, f"{description} {requested!r} が存在しません")
+        require(len(matches) == 1, f"{description} {requested!r} は複数ページで曖昧です。page-id/cell-id で指定してください: {', '.join(matches)}")
         qualified_id = matches[0]
         cell = qualified[qualified_id]
-        require(cell.get("vertex") == "1", f"AWSアイコン必須セル {qualified_id!r} はvertexである必要があります")
+        require(cell.get("vertex") == "1", f"{description} {qualified_id!r} はvertexである必要があります")
+        yield qualified_id, cell
+
+
+def check_required_aws_icons(root, requested_ids):
+    """Check service shape syntax; installed-library existence is checked by the author."""
+    for qualified_id, cell in required_vertices(root, requested_ids, "AWSアイコン必須セル"):
         properties = check_style(cell)
         shape = properties.get("shape", "")
-        require(AWS_SHAPE.fullmatch(shape), f"AWSアイコン必須セル {qualified_id!r}: shape に mxgraph.aws4.* の組み込み図形が必要です")
+        require(AWS_SHAPE.fullmatch(shape) and not is_aws_group_shape(shape), f"AWSアイコン必須セル {qualified_id!r}: shape にグループ以外の mxgraph.aws4.* の組み込み図形が必要です")
         # check_style already requires a distinct AWS resIcon for resourceIcon.
+
+
+def check_required_aws_groups(root, requested_ids):
+    """Require a native AWS frame; its grIcon can be omitted, for example for an AZ."""
+    for qualified_id, cell in required_vertices(root, requested_ids, "AWSグループ必須セル"):
+        properties = check_style(cell)
+        require(properties.get("shape") in AWS_GROUP_SHAPES, f"AWSグループ必須セル {qualified_id!r}: shape にAWSグループ用の mxgraph.aws4.group または mxgraph.aws4.groupCenter が必要です")
+        require(properties.get("container") == "1", f"AWSグループ必須セル {qualified_id!r}: container=1 が必要です")
 
 
 def ancestors(cell_id, cells):
@@ -245,7 +277,7 @@ def check_page(page):
     return len(cells) - 2
 
 
-def validate(path, required_aws_icons=None):
+def validate(path, required_aws_icons=None, required_aws_groups=None):
     data = path.read_bytes()
     try:
         xml = data.decode("utf-8-sig")
@@ -284,6 +316,8 @@ def validate(path, required_aws_icons=None):
             raise InvalidDiagram(f"ページ {page_id}: {error}") from None
     if required_aws_icons:
         check_required_aws_icons(root, required_aws_icons)
+    if required_aws_groups:
+        check_required_aws_groups(root, required_aws_groups)
     return data, len(root), total
 
 
@@ -292,6 +326,7 @@ def main():
     parser.add_argument("files", nargs="+", type=Path, help="検証対象の.drawio/.xmlファイル")
     parser.add_argument("--same", action="store_true", help="指定した2個以上のファイルがバイト単位で一致することも検査")
     parser.add_argument("--require-aws-icons", nargs="+", metavar="ID", help="各ファイルの指定セルにAWS組み込み図形を要求。複数ページでは page-id/cell-id を使用。ファイル名はこのオプションより前に指定")
+    parser.add_argument("--require-aws-groups", nargs="+", metavar="ID", help="各ファイルの指定セルにAWSグループ用shapeとcontainer=1を要求。grIconは任意。複数ページでは page-id/cell-id を使用。ファイル名はこのオプションより前に指定")
     args = parser.parse_args()
     if args.same and len(args.files) < 2:
         parser.error("--same には2個以上のファイルが必要です")
@@ -299,7 +334,7 @@ def main():
     valid = []
     for path in args.files:
         try:
-            data, pages, cells = validate(path, args.require_aws_icons)
+            data, pages, cells = validate(path, args.require_aws_icons, args.require_aws_groups)
             valid.append((path, data))
             print(f"OK: {path} ({pages}ページ、{cells}セル)")
         except (OSError, InvalidDiagram) as error:

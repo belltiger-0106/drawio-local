@@ -41,13 +41,13 @@
 
 ## 枠・ラベル・線
 
-背景の枠には、例えば次のstyleを使う。ノードより先に定義し、配色は薄くする。
+AWS境界の枠には組み込みAWSグループ図形を使う。例えば次はVPC用のstyle。ノードより先に定義し、`grIcon` や配色は [AWSグループ図形](aws-groups.md) の対象種別に合わせる。
 
 ```text
-rounded=0;container=1;collapsible=0;recursiveResize=0;whiteSpace=wrap;html=0;verticalAlign=top;align=left;spacingTop=8;spacingLeft=12;fillColor=#F8FAFC;strokeColor=#94A3B8;fontColor=#0F172A;fontSize=15;fontStyle=1;
+shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc2;grStroke=1;container=1;collapsible=0;recursiveResize=0;pointerEvents=0;whiteSpace=wrap;html=0;verticalAlign=top;align=left;spacingTop=8;spacingLeft=36;fillColor=none;strokeColor=#8C4FFF;fontColor=#232F3E;fontSize=15;fontStyle=1;
 ```
 
-親の見出し領域に子を重ねない。構造検査は見出しとの衝突や実際の文字幅まで判定しないため、座標と画像も確認する。
+親の見出し領域とグループアイコンに子を重ねない。子セルはAWSグループを `parent` にし、座標をその親からの相対位置にする。構造検査は見出しとの衝突や実際の文字幅まで判定しないため、座標と画像も確認する。AWS以外の注記枠やタイトルには基本図形を使える。
 
 ラベルは `html=0`。改行にはXML属性中の `&#10;` を使う。`&`、`<`、`>`、引用符はXMLライブラリでエスケープする。HTMLの `<br>` や `&nbsp;` を挿入しない。日本語はUTF-8で保存し、外部Webフォントは使わない。
 
@@ -64,7 +64,7 @@ rounded=0;container=1;collapsible=0;recursiveResize=0;whiteSpace=wrap;html=0;ver
 
 ## 外部依存を作らない
 
-出力にはリンク属性、画像セル、SVGの埋め込み、Data URI、URL参照、カスタムJavaScript、外部XML実体、DOCTYPE、HTMLラベルを含めない。XML宣言以外の処理命令も含めない。AWSサービスには組み込みAWS図形を、境界・注記・非AWS要素には基本図形を使う。`mxgraph.aws4.*` はローカルの組み込み図形識別子であり、禁止対象の外部画像参照ではない。
+出力にはリンク属性、画像セル、SVGの埋め込み、Data URI、URL参照、カスタムJavaScript、外部XML実体、DOCTYPE、HTMLラベルを含めない。XML宣言以外の処理命令も含めない。AWSサービスには組み込みAWSサービス図形、AWS境界には組み込みAWSグループ図形を使う。注記・非AWS要素には基本図形を使用できる。`mxgraph.aws4.*` はローカルの組み込み図形識別子であり、禁止対象の外部画像参照ではない。
 
 同梱検査スクリプトはこの制限付き形式を検査する。未知の機能を含む既存ファイルのエラーは、draw.io全体で無効だという意味ではない。検査を通すために既存の内容を無言で落とさない。
 
@@ -96,11 +96,11 @@ C:\Program Files (x86)\draw.io\draw.io.exe
 
 ## 納品前の確認項目
 
-1. 要求されたリソース、境界、接続がそろい、推測が注記されている。AWSサービスには対応する組み込みアイコンが指定されている。
+1. 要求されたリソース、境界、接続がそろい、推測が注記されている。AWSサービスには対応する組み込みアイコン、AWS境界にはAWSグループ図形が指定されている。
 2. XMLが解釈でき、ID・親・接続先・有限な座標・辺の共通祖先が正しい。
 3. 外部参照、画像、HTMLラベルを含まない。
 4. 各要素が親枠内に収まり、ラベルが読める。線と図形が不用意に重ならない。
 5. `.drawio` と `.xml` が存在し、最終修正後のバイト列が一致する。
 6. 実施した検査と未実施の目視確認を区別して報告できる。
 
-AWS構成図の検査では、すべてのAWSサービスノードを `--require-aws-icons` に指定する。単一ページなら `alb ec2-a ec2-b` のようにセルIDを列挙し、複数ページでIDが重複する場合は `page-id/cell-id` とする。矩形、欠落ID、`resourceIcon` の `resIcon` 指定漏れを検出する。境界枠やラベル用セルは対象に含めない。図形識別子の実在性と画面上の表示は、ローカル資材と描画で確認する。
+AWS構成図の検査では、すべてのAWSサービスノードを `--require-aws-icons`、すべてのAWS境界を `--require-aws-groups` に指定する。単一ページならセルIDを列挙し、複数ページでIDが重複する場合は `page-id/cell-id` とする。矩形への置換、欠落ID、`resourceIcon` の `resIcon` 指定漏れ、サービスとグループの混同を検出する。ラベル用セルや注記は両方の対象から外す。各境界に適切な `grIcon` は対応表で、図形の実際の表示はローカル描画で確認する。

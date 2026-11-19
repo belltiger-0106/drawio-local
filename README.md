@@ -1,6 +1,6 @@
 # drawio-local
 
-Claude Codeで、draw.ioの組み込みAWSアイコンを使った構成図を作成するためのローカル処理用スキルです。編集可能なdraw.io XMLを直接生成し、同一内容の `.drawio` と `.xml` を保存します。
+Claude Codeで、draw.ioの組み込みAWSサービスアイコンとAWSグループ図形を使った構成図を作成するためのローカル処理用スキルです。編集可能なdraw.io XMLを直接生成し、同一内容の `.drawio` と `.xml` を保存します。
 
 ## 特徴
 
@@ -8,8 +8,9 @@ Claude Codeで、draw.ioの組み込みAWSアイコンを使った構成図を�
 - 図の作成時に外部サイト、外部API、MCP、オンライン変換を使用しない。
 - 共有URLを生成せず、ローカルファイルとして納品。
 - Python標準ライブラリだけでXML構造と2ファイルの一致を検査。
-- AWSサービスには組み込みアイコンを使用。VPC・AZ・サブネットの境界や注記には基本図形を使用。
-- AWSサービスが名前だけの矩形に置き換わっていないことを、対象セルIDを指定して検査。
+- AWSサービスには組み込みサービスアイコンを使用。
+- アカウント・リージョン・VPC・AZ・サブネットの枠には組み込みAWSグループ図形を使用。注記・タイトル・非AWS要素には基本図形を使用。
+- サービスとグループの両方が汎用矩形に置き換わっていないことを、対象セルIDを指定して検査。
 
 「ローカル」は図の参照・生成・検証・保存処理の範囲です。Claude Code本体のモデル通信をオフライン化する機能ではありません。draw.io Desktopの通信を強制遮断する機能もありません。
 
@@ -53,9 +54,10 @@ diagrams/aws-web.drawio と diagrams/aws-web.xml に保存してください。
 |---|---|
 | [SKILL.md](SKILL.md) | Claude Codeが使用するスキル本体 |
 | [AWS配置ガイド](references/aws-layout.md) | サービスの配置・境界・線の意味 |
+| [AWSグループ図形](references/aws-groups.md) | アカウント・リージョン・VPC・AZ・サブネットの図形指定 |
 | [XML形式ガイド](references/xml-format.md) | XML構造・レイアウト・ローカル描画 |
 | [検査スクリプト](scripts/validate_drawio.py) | 構造検査とバイト単位の一致確認 |
-| [サンプル.drawio](examples/aws-web.drawio) | 組み込みALB・EC2アイコンによる2AZのAWS構成例 |
+| [サンプル.drawio](examples/aws-web.drawio) | 組み込みALB・EC2アイコンとAWSグループによる2AZの構成例 |
 | [サンプル.xml](examples/aws-web.xml) | サンプル.drawioと同一内容のXML |
 
 サンプルはdraw.io Desktop 32.6.10で描画・目視確認済みです。アイコン画像や図形ライブラリの実装コードは同梱していません。
@@ -65,11 +67,11 @@ diagrams/aws-web.drawio と diagrams/aws-web.xml に保存してください。
 リポジトリのルートで実行します。
 
 ```text
-python -X utf8 scripts/validate_drawio.py examples/aws-web.drawio examples/aws-web.xml --same --require-aws-icons alb ec2-a ec2-b
+python -X utf8 scripts/validate_drawio.py examples/aws-web.drawio examples/aws-web.xml --same --require-aws-icons alb ec2-a ec2-b --require-aws-groups account region vpc az-a az-b public-a private-a public-b private-b
 ```
 
 macOSやLinuxでコマンド名が `python3` の場合は読み替えてください。追加のPythonパッケージは不要です。
 
-`--require-aws-icons` には図内のすべてのAWSサービスノードのセルIDを指定します。複数ページでIDが重複するときは `page-id/cell-id` を指定します。指定セルが矩形だった場合や、`resourceIcon` の `resIcon` が欠けている場合はエラーになります。
+`--require-aws-icons` にはすべてのAWSサービスノード、`--require-aws-groups` にはすべてのAWS境界・グループのセルIDを指定します。複数ページでIDが重複するときは `page-id/cell-id` を指定します。指定セルが汎用矩形だった場合、サービスとグループを取り違えた場合、`resourceIcon` の `resIcon` が欠けている場合はエラーになります。AZは専用アイコンのないAWSグループとして表現します。
 
 検査は本スキルが生成する非圧縮XML形式が対象です。圧縮ページ、HTMLラベル、画像、独自拡張を含む一般のdraw.ioファイルには対応していません。また、アイコンの実際の描画、文字の重なり、AWS構成の意味的な正しさは、構造検査だけでは判定しません。
